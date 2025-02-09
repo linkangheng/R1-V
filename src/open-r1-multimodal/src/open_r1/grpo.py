@@ -49,6 +49,13 @@ class GRPOScriptArguments(ScriptArguments):
         metadata={"help": "Minimum number of pixels for the image"},
     )
 
+@dataclass
+class GRPOConfig(GRPOConfig):
+    trainable_parts: Optional[str] = field(
+        default="full",
+        metadata={"help": "Trainable parts of the model"},
+        # choices=["vision", "language", "full"],
+    )
 
 def accuracy_reward(completions, solution, **kwargs):
     """Reward function that checks if the completion is correct using either symbolic verification or exact string matching."""
@@ -200,4 +207,5 @@ def main(script_args, training_args, model_args):
 if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
+    print(training_args.trainable_parts)
     main(script_args, training_args, model_args)
