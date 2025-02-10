@@ -21,10 +21,9 @@ from typing import Optional
 from datasets import load_dataset, load_from_disk
 from transformers import Qwen2VLForConditionalGeneration
 
-from math_verify import parse, verify
 from open_r1.trainer import Qwen2VLGRPOTrainer
+from open_r1.rewards import accuracy_reward, format_reward, diff_reward
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, ScriptArguments, TrlParser, get_peft_config
-
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):
@@ -54,63 +53,13 @@ class GRPOConfig(GRPOConfig):
     trainable_parts: Optional[str] = field(
         default="full",
         metadata={"help": "Trainable parts of the model"},
-        # choices=["vision", "language", "full"],
+        # choices=["lm", "full"],
     )
-
-def accuracy_reward(completions, solution, **kwargs):
-    """Reward function that checks if the completion is correct using either symbolic verification or exact string matching."""
-    contents = [completion[0]["content"] for completion in completions]
-    rewards = []
-    current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
-    for content, sol in zip(contents, solution):
-        reward = 0.0
-        # Try symbolic verification first
-        try:
-            answer = parse(content)
-            if float(verify(answer, parse(sol))) > 0:
-                reward = 1.0
-        except Exception:
-            pass  # Continue to next verification method if this fails
-
-        # If symbolic verification failed, try string matching
-        if reward == 0.0:
-            try:
-                # Extract answer from solution if it has think/answer tags
-                sol_match = re.search(r'<answer>(.*?)</answer>', sol)
-                ground_truth = sol_match.group(1).strip() if sol_match else sol.strip()
-                
-                # Extract answer from content if it has think/answer tags
-                content_match = re.search(r'<answer>(.*?)</answer>', content)
-                student_answer = content_match.group(1).strip() if content_match else content.strip()
-                
-                # Compare the extracted answers
-                if student_answer == ground_truth:
-                    reward = 1.0
-            except Exception:
-                pass  # Keep reward as 0.0 if both methods fail
-                
-        rewards.append(reward)
-        if os.getenv("DEBUG_MODE") == "true":
-            log_path = os.getenv("LOG_PATH")
-            # local_rank = int(os.getenv("LOCAL_RANK", 0))
-            with open(log_path, "a") as f:
-                f.write(f"------------- {current_time} Accuracy reward: {reward} -------------\n")
-                f.write(f"Content: {content}\n")
-                f.write(f"Solution: {sol}\n")
-    return rewards
-
-
-def format_reward(completions, **kwargs):
-    """Reward function that checks if the completion has a specific format."""
-    pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
-    completion_contents = [completion[0]["content"] for completion in completions]
-    matches = [re.fullmatch(pattern, content, re.DOTALL) for content in completion_contents]
-    return [1.0 if match else 0.0 for match in matches]
-
 
 reward_funcs_registry = {
     "accuracy": accuracy_reward,
     "format": format_reward,
+    "diff": diff_reward,
 }
 
 SYSTEM_PROMPT = (
@@ -167,7 +116,6 @@ def main(script_args, training_args, model_args):
             ],
         }
 
-
     if "image" in dataset[script_args.dataset_train_split].features:
         print("has image in dataset")
         dataset = dataset.map(make_conversation_image)  # Utilize multiprocessing for faster mapping
@@ -207,5 +155,4 @@ def main(script_args, training_args, model_args):
 if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
-    print(training_args.trainable_parts)
     main(script_args, training_args, model_args)

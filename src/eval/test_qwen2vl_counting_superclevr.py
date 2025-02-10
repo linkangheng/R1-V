@@ -4,10 +4,11 @@ import torch
 import json
 from tqdm import tqdm
 import re
+import os
 
 
 
-MODEL_PATH="Qwen2-VL-2B-GRPO-CLEVR-70k/checkpoint-100" # Qwen2vl-2b-Instruct for original scores
+MODEL_PATH="/mnt/jfs-test/checkpoints/par/duidian/r1v_diff-reward/checkpoint-100" # Qwen2vl-2b-Instruct for original scores
 BSZ=64 # reduce it if GPU OOM
 OUTPUT_PATH="./logs/counting_results_superclevr_200_qwen2vl_2b_instruct_grpo_100.json"
 PROMPT_PATH="./prompts/superclevr_test200_counting_problems.jsonl"
@@ -39,7 +40,7 @@ for i in data:
         "content": [
             {
                 "type": "image", 
-                "image": f"file://{i['image_path']}"
+                "image": f"file://{os.path.join('/mnt/jfs-test/data/clevr_cogen_a_eval', i['image_path'])}"
             },
             {
                 "type": "text",
